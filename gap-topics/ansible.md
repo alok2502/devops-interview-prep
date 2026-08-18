@@ -46,3 +46,43 @@ each target, runs tasks (via Python on target), reports changed vs ok. Push-base
 management over SSH — nothing to install on targets. Define servers in an inventory, write
 YAML playbooks describing desired state using modules, idempotent so safe to re-run. Terraform
 provisions the infra, Ansible configures it — complementary."
+
+# Gap Topic: Ansible — How it Authenticates & Runs (SSH details)
+
+## Authentication (how Ansible gets into targets)
+Standard SSH — same as a human SSHing in:
+1. **SSH key-based** (standard for automation) — public key in target's `~/.ssh/authorized_keys`,
+   control node uses matching private key. No password prompts.
+2. **User/password** — possible (`ansible_user`/`ansible_password`, or `--ask-pass`), but keys preferred.
+```ini
+[webservers]
+10.0.1.5 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/id_rsa
+```
+
+## Privilege escalation (running as root)
+`become: yes` → runs task via **sudo** on the target. Ansible SSHes in as a normal user, escalates
+to root for tasks that need it.
+
+## How tasks actually run (why it's "agentless")
+1. SSH into target.
+2. Copy the relevant **Python module code** to a temp dir on the target.
+3. Target's **Python interpreter** executes it (does the real work).
+4. Returns result (changed/ok/failed), cleans up temp files.
+Only requirement on target: **SSH + Python**. No permanent agent → "agentless."
+
+## Getting SSH keys onto N machines (the bootstrap problem)
+- `ssh-copy-id user@host` — few machines, manual (appends key to authorized_keys).
+- **SCALE / cloud:** inject key at PROVISIONING time:
+  - AWS EC2 **key pair** at launch (AWS auto-adds to authorized_keys)
+  - Golden **AMI** with keys baked in
+  - **cloud-init / user-data** startup script
+- **Clean pattern:** Terraform provisions instances WITH the key → Ansible configures
+  (provisioning + config hand off).
+- Existing machines w/o keys: initial password-based Ansible run to distribute keys, then key-based.
+- Enterprise: AWS SSM Session Manager (no keys, IAM-based).
+
+## One-liner
+"Ansible authenticates over SSH (key-based for automation), escalates via sudo with `become`,
+copies its module code to the target, runs it with the target's Python, returns result, cleans up
+— that's why it's agentless. At scale, the SSH key is injected at provisioning time (EC2 key pair,
+AMI, or cloud-init) rather than copied to running machines."

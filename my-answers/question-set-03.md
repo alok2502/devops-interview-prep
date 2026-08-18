@@ -97,7 +97,39 @@ This is WHY pod anti-affinity matters — node recovery isn't instant.
 
 ---
 
-## Still to cover in set 03 (next session)
-Linux mount command; RCA when app down in cloud; master vs worker node down; VPC for HA;
-scripting experience (→ AI agent); Terraform code experience; Docker experience (→ capstone);
-**Terraform workspaces** (gap to fill).
+## 9. Linux command for mounting a filesystem
+
+Mounting = attach storage/filesystem to a directory (mount point). sudo mount /dev/xvdf /mnt/data (device → directory). TEMPORARY — doesn't survive reboot. Persistent = entry in /etc/fstab (read at boot). umount to detach. lsblk (list devices), df -h (mounts). New device: mkfs to format first. Real use: attach EBS volume to EC2.
+
+## 10. Detect root cause when app down in cloud (OUTSIDE IN)
+
+(1) Monitoring/Grafana — localize (which service? when?). (2) Path to app — LB/ingress/DNS reaching it? (3) Pods — get pods (Pending/CrashLoop/ImagePullBackOff/0-of-N) → describe (events
+
+exit code: 1=app, 137=OOM) → logs/--previous (actual app error). (4) Node NotReady? (5) Dependencies — RDS/managed service down? Fix per root cause.
+## 11. Master node down vs Worker node down
+Worker down: pods reschedule after ~5min; HA replicas + anti-affinity → survivors keep serving (no user impact); node group/autoscaler replaces it. Largely self-healing.
+Master/control-plane down: runs API server/scheduler/controllers/etcd. KEY: existing workloads KEEP RUNNING on workers — you lose MANAGEMENT (scheduling, self-heal, kubectl), not the apps. Production = MULTIPLE masters (HA, etcd quorum, behind LB) → one failing survivable. Response: restore/replace master fast; run HA masters so not a SPOF. (Correction to avoid: master down ≠ "entire app down.")
+## 12. Configure a VPC for High Availability
+
+(1) Multiple AZs (2-3). (2) Public + private subnets in EACH AZ. (3) Load balancer spanning all AZs → routes around dead AZ. (4) NAT gateway PER AZ (NAT is AZ-specific — one-per-AZ avoids SPOF). (5) Auto Scaling Group across AZs. (6) Multi-AZ data (RDS Multi-AZ + auto-failover). No AZ/gateway/instance is a SPOF.
+
+## 13. Scripting experience → AI monitoring agent (Python)
+
+Python + MCP. LLM extracts PARAMETERS from natural language, fills PRE-BUILT validated queries (not query-gen — safe/fast/accurate). Example: "errors in last 24h" → LLM picks tool=list_errors
+
+time=24h → computes from/to dates → fills query → DB → results. Many tools. Impact: 100+ users incl leadership, 30min→2min. KEEP the concrete example — proves understanding.
+## 14. Terraform code experience
+
+Modules (defined + stored in git, reused via source path, pulled by init, pass variables) + remote state (S3: versioning+encryption) + locking (DynamoDB or native use_lockfile). HONEST FRAMING: deep hands-on is from self-driven/course projects; don't overclaim multi-team prod.
+
+## 15. Docker experience
+
+4 languages. Go (compiled) → multi-stage → distroless → ~18MB, small attack surface. Python (interpreted) → slim/alpine + layer caching (requirements first) + non-root user. Node similar. Java → multi-stage Maven→JRE. Security: non-root, minimal caps. Round out: docker-compose, registry push in CI. Give breadth+depth+why, know when to stop.
+
+## 16. Terraform workspaces (see gap-topics/terraform-workspaces.md)
+
+Separate STATE files, SAME config. terraform.workspace to vary per env. GOOD for lightweight/ temporary envs. NOT for strong dev/prod separation (same backend+creds, easy to hit wrong workspace). Instead: separate root modules/dirs per env + separate backends/accounts + shared modules.
+
+## 17. Ansible (see gap-topics/ansible.md + ansible-ssh-auth.md)
+
+Agentless config management over SSH; idempotent. Inventory + playbook (YAML) + modules + roles. Terraform provisions → Ansible configures.
